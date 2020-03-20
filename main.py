@@ -12,18 +12,22 @@ import time
 import logging
 
 
+TIME_BETWEEN_SAMPLES = 0.3
+
 class MapleBot:
     NOT_RELEVEMT_SCREEN_Y = 70
     WINDOW_NAME = 'MapleRoyals'
-    MIN_SSIN = 0.9
+    MIN_SSIN = 0.92
     
-    MIN_MONSTER_SIZE = (10, 10)
+    MIN_MONSTER_SIZE = (20, 20)
 
     def __init__(self):
         self.x_up = None
         self.y_up = None
         self.x_length = None
         self.y_length = None
+        self.last_run = 0
+        self.last_image = None
 
     def get_grab_sizes(self):
         hwnd = win32gui.FindWindow(None, self.WINDOW_NAME)
@@ -39,42 +43,13 @@ class MapleBot:
         self.y_up = y
         self.x_length = x1
         self.y_length = y1 - self.NOT_RELEVEMT_SCREEN_Y
+
         logging.info("x_up = {}".format(self.x_up))
         logging.info("y_up = {}".format(self.y_up))
         logging.info("x_length = {}".format(self.x_length))
         logging.info("y_length = {}".format(self.y_length))
-
-    # def grab_screen(region=None):
-    #     hwin = win32gui.GetDesktopWindow()
-    #     if region:
-    #             left,top,x2,y2 = region
-    #             width = x2 - left + 1
-    #             height = y2 - top + 1
-    #     else:
-    #         width = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN)
-    #         height = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN)
-    #         left = win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN)
-    #         top = win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN)
-
-    #     hwindc = win32gui.GetWindowDC(hwin)
-    #     srcdc = win32ui.CreateDCFromHandle(hwindc)
-    #     memdc = srcdc.CreateCompatibleDC()
-    #     bmp = win32ui.CreateBitmap()
-    #     bmp.CreateCompatibleBitmap(srcdc, width, height)
-    #     memdc.SelectObject(bmp)
-    #     memdc.BitBlt((0, 0), (width, height), srcdc, (left, top), win32con.SRCCOPY)
-        
-    #     signedIntsArray = bmp.GetBitmapBits(True)
-    #     img = np.fromstring(signedIntsArray, dtype='uint8')
-    #     img.shape = (height,width,4)
-
-    #     srcdc.DeleteDC()
-    #     memdc.DeleteDC()
-    #     win32gui.ReleaseDC(hwin, hwindc)
-    #     win32gui.DeleteObject(bmp.GetHandle())
-
-    #     return cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)        
-
+    
+    
     def screenshot(self):
         image = np.array((ImageGrab.grab(bbox=(self.x_up, self.y_up, self.x_length, self.y_length))),dtype=np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
@@ -85,16 +60,23 @@ class MapleBot:
         return image
 
     def get_image_difference(self, delay=None):
-        grayA = self.screenshot()
 
-        if delay:
-            time.sleep(delay)
+        previousGray = self.last_image
 
-        grayB = self.screenshot()
+        diff_time = time.time() - self.last_run
+        
+        if diff_time < TIME_BETWEEN_SAMPLES:
+            time.sleep(TIME_BETWEEN_SAMPLES - diff_time)
+
+        self.last_run = time.time()
+
+        currentGray = self.screenshot()
+
+        self.last_image = currentGray
 
         # compute the Structural Similarity Index (SSIM) between the two
         # images, ensuring that the difference image is returned
-        (score, diff) = compare_ssim(grayA, grayB, full=True)
+        (score, diff) = compare_ssim(previousGray, currentGray, full=True)
 
         if score < self.MIN_SSIN:
             logging.warning("ssin to low: {} exit".format(score))
@@ -117,8 +99,8 @@ class MapleBot:
 
         for i in f:
             x, y, w, h = i
-            cv2.rectangle(grayA, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.imshow("Original", grayA)
+            cv2.rectangle(previousGray, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.imshow("Original", previousGray)
 
 
 
@@ -152,7 +134,7 @@ class MapleBot:
     
     def process(self):
         start_loop_time = time.time()
-        screen = self.screenshot()
+        # screen = self.screenshot()
         # time.sleep(1)
         monsters = self.get_image_difference()
         # print(list(monsters))
@@ -168,9 +150,11 @@ class MonsterFilter:
 
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     maplebot = MapleBot()
-    maplebot.get_grab_sizes()    
+    maplebot.get_grab_sizes()
+    maplebot.last_image = maplebot.screenshot()
+    maplebot.last_run = time.time()
     while True:
         maplebot.process()
         if cv2.waitKey(25) & 0xFF == ord('q'):
