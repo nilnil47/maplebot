@@ -4,7 +4,7 @@ from skimage.measure import compare_ssim
 import imutils
 import win32gui
 # import PIL.ImageGrab
-from PIL import ImageGrab
+from PIL import ImageGrab, Image
 # import PIL
 import numpy as np
 import cv2
@@ -161,5 +161,13 @@ def main():
             cv2.destroyAllWindows()
             break
 
+def take_screenshot():
+    maplebot = MapleBot()
+    maplebot.get_grab_sizes()
+    img = maplebot.screenshot()
+    im = Image.fromarray(img)
+    im.save("your_file.jpeg")
+
 if __name__ == "__main__":
     main()
+    # take_screenshot()
